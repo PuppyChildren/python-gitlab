@@ -21,11 +21,16 @@ import argparse
 import functools
 import re
 import sys
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, Tuple, Type
+
+from requests.structures import CaseInsensitiveDict
 
 import gitlab.config
 
-camel_re = re.compile("(.)([A-Z])")
+# Full credit for this regex goes to:
+# https://github.com/jpvanhal/inflection/blob/master/inflection/__init__.py
+camel_upperlower_regex = re.compile(r"([A-Z]+)([A-Z][a-z])")
+camel_lowerupper_regex = re.compile(r"([a-z\d])([A-Z])")
 
 # custom_actions = {
 #    cls: {
@@ -72,12 +77,20 @@ def die(msg: str, e=None) -> None:
     sys.exit(1)
 
 
-def what_to_cls(what: str) -> str:
-    return "".join([s.capitalize() for s in what.split("-")])
+def what_to_cls(what: str, namespace: Type) -> Type:
+    """Given a kebab-case string from a CLI argument, return a corresponding
+    (CamelCase) class in a given namespace with a case-insensitive lookup."""
+    classes = CaseInsensitiveDict(namespace.__dict__)
+    lowercase_class = what.replace("-", "")
+
+    return classes[lowercase_class]
 
 
 def cls_to_what(cls) -> str:
-    return camel_re.sub(r"\1-\2", cls.__name__).lower()
+    """Convert CamelCase class names to kebab-case in two steps, to ensure names
+    with whole upper-case words are correctly dash-separated as well."""
+    dash_upper = camel_upperlower_regex.sub(r"\1-\2", cls.__name__)
+    return camel_lowerupper_regex.sub(r"\1-\2", dash_upper).lower()
 
 
 def _get_base_parser(add_help: bool = True) -> argparse.ArgumentParser:
